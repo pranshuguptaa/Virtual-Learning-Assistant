@@ -22,57 +22,81 @@
     <script type="text/babel">
         const { useState, useRef, useEffect } = React;
 
-        // Enhanced problem solver with support for more types
+        // Enhanced problem solver with better text processing
         const solveProblem = (text) => {
             try {
-                // Clean the text
-                const cleanText = text.toLowerCase().trim();
+                // Clean the text more thoroughly
+                const cleanText = text.toLowerCase()
+                    .replace(/\n/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
 
-                // Detect problem type
-                if (cleanText.includes('solve')) {
-                    return solveMathProblem(text);
-                } else if (cleanText.includes('define') || cleanText.includes('what is')) {
-                    return handleDefinition(text);
-                } else if (cleanText.includes('translate')) {
-                    return handleTranslation(text);
-                } else {
-                    // Default to math problem
-                    return solveMathProblem(text);
+                console.log('Recognized text:', cleanText); // For debugging
+
+                // More robust problem type detection
+                if (cleanText.match(/solve|find|calculate|what is|evaluate/i)) {
+                    if (cleanText.includes('=') || cleanText.includes('x')) {
+                        return solveMathProblem(cleanText);
+                    } else if (cleanText.match(/\d/)) {
+                        return solveMathProblem(cleanText);
+                    }
                 }
+
+                // If no clear math problem is detected
+                return {
+                    steps: [
+                        'Recognized text: ' + cleanText,
+                        'Could not identify a valid mathematical problem'
+                    ],
+                    result: 'Please ensure the problem is clearly visible and contains mathematical expressions'
+                };
             } catch (error) {
+                console.error('Problem solving error:', error);
                 return {
                     steps: ['Error: Could not analyze the problem'],
-                    result: 'Unable to process'
+                    result: 'Unable to process. Please try again.'
                 };
             }
         };
 
-        // Math problem solver (enhanced)
+        // Improved math problem solver
         const solveMathProblem = (problem) => {
             try {
-                const cleanProblem = problem.replace(/solve|find|calculate/i, '').trim();
-                
-                // Handle different types of math problems
-                if (cleanProblem.includes('x')) {
+                // Clean the problem text more thoroughly
+                let cleanProblem = problem
+                    .replace(/solve|find|calculate|what is/i, '')
+                    .replace(/×/g, '*')
+                    .replace(/÷/g, '/')
+                    .replace(/\s+/g, '')
+                    .trim();
+
+                console.log('Cleaned math problem:', cleanProblem); // For debugging
+
+                // Handle equations with variables
+                if (cleanProblem.includes('=')) {
                     return solveEquation(cleanProblem);
-                } else if (cleanProblem.includes('+') || cleanProblem.includes('-') || 
-                         cleanProblem.includes('×') || cleanProblem.includes('÷')) {
-                    return solveArithmetic(cleanProblem);
-                } else if (cleanProblem.includes('%')) {
-                    return solvePercentage(cleanProblem);
                 }
 
-                // Default arithmetic solver
-                const result = math.evaluate(cleanProblem);
-                return {
-                    steps: [
-                        `Original problem: ${cleanProblem}`,
-                        `Evaluate the expression`,
-                        `Result: ${result}`
-                    ],
-                    result: String(result)
-                };
+                // Handle basic arithmetic
+                try {
+                    const result = math.evaluate(cleanProblem);
+                    return {
+                        steps: [
+                            `Original problem: ${problem}`,
+                            `Cleaned expression: ${cleanProblem}`,
+                            `Result: ${result}`
+                        ],
+                        result: String(result)
+                    };
+                } catch (e) {
+                    console.error('Math evaluation error:', e);
+                    return {
+                        steps: ['Error: Invalid mathematical expression'],
+                        result: 'Please check the problem format'
+                    };
+                }
             } catch (error) {
+                console.error('Math problem solving error:', error);
                 return {
                     steps: ['Error: Could not solve the math problem'],
                     result: 'Unable to solve'
@@ -335,19 +359,30 @@ Date: ${new Date(entry.timestamp).toLocaleString()}
                     
                     const imageData = canvas.toDataURL('image/jpeg');
 
-                    // Recognize text
-                    const result = await Tesseract.recognize(imageData);
+                    // Improve text recognition with better configuration
+                    const result = await Tesseract.recognize(imageData, {
+                        lang: 'eng',
+                        tessedit_char_whitelist: '0123456789+-*/()=xX.% ',
+                    });
+                    
                     const recognizedText = result.data.text.trim();
+                    console.log('Recognized text:', recognizedText); // For debugging
 
-                    // Solve problem
+                    if (!recognizedText) {
+                        throw new Error('No text was recognized from the image');
+                    }
+
                     const solution = solveProblem(recognizedText);
                     setSolution(solution);
                     saveSolution(recognizedText, solution);
 
-                    // Read solution
-                    speak(`The solution is ${solution.result}`);
+                    // Only speak if there's a valid result
+                    if (solution.result && solution.result !== 'Unable to solve') {
+                        speak(`The solution is ${solution.result}`);
+                    }
                 } catch (err) {
-                    setError('Error analyzing the problem. Please try again.');
+                    console.error('Analysis error:', err);
+                    setError('Error analyzing the problem. Please ensure good lighting and clear text visibility.');
                 } finally {
                     setLoading(false);
                 }

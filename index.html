@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Learning Assistant</title>
+    <!-- Required external libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.2.1/math.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+
+        // Helper function for text-to-speech
+        const speak = (text) => {
+            const utterance = new SpeechSynthesisUtterance(text);
+            window.speechSynthesis.speak(utterance);
+        };
+
+        // Helper function to solve basic math problems
+        const solveMathProblem = (problem) => {
+            try {
+                // Remove "solve" or similar words from the beginning
+                const cleanProblem = problem.replace(/solve|find|calculate/i, '').trim();
+                
+                // Handle equations with variables
+                if (cleanProblem.includes('x')) {
+                    // Simple linear equation solver
+                    const sides = cleanProblem.split('=').map(side => side.trim());
+                    if (sides.length !== 2) throw new Error('Invalid equation format');
+                    
+                    const left = sides[0];
+                    const right = sides[1];
+                    
+                    // Parse the equation (very basic implementation)
+                    const coefficient = parseFloat(left.match(/(-?\d*\.?\d*)x/)[1] || 1);
+                    const constant = parseFloat(right);
+                    
+                    const solution = constant / coefficient;
+                    
+                    return {
+                        steps: [
+                            `Original equation: ${cleanProblem}`,
+                            `Isolate the variable: ${coefficient}x = ${constant}`,
+                            `Divide both sides by ${coefficient}: x = ${solution}`
+                        ],
+                        result: `x = ${solution}`
+                    };
+                } else {
+                    // For basic arithmetic
+                    const result = math.evaluate(cleanProblem);
+                    return {
+                        steps: [
+                            `Original problem: ${cleanProblem}`,
+                            `Evaluate the expression`,
+                            `Result: ${result}`
+                        ],
+                        result: String(result)
+                    };
+                }
+            } catch (error) {
+                return {
+                    steps: ['Error: Could not solve the problem'],
+                    result: 'Unable to solve'
+                };
+            }
+        };
+
+        function App() {
+            const [isRecording, setIsRecording] = useState(false);
+            const [solution, setSolution] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState('');
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+
+            // Initialize camera
+            const startCamera = async () => {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = stream;
+                        setIsRecording(true);
+                        setError('');
+                    }
+                } catch (err) {
+                    setError('Unable to access camera. Please ensure you have granted camera permissions.');
+                }
+            };
+
+            // Stop camera
+            const stopCamera = () => {
+                if (videoRef.current && videoRef.current.srcObject) {
+                    const tracks = videoRef.current.srcObject.getTracks();
+                    tracks.forEach(track => track.stop());
+                    videoRef.current.srcObject = null;
+                    setIsRecording(false);
+                }
+            };
+
+            // Capture and analyze image
+            const analyzeProblem = async () => {
+                if (!videoRef.current || !canvasRef.current) return;
+
+                setLoading(true);
+                setSolution(null);
+
+                try {
+                    // Capture current frame
+                    const canvas = canvasRef.current;
+                    const context = canvas.getContext('2d');
+                    canvas.width = videoRef.current.videoWidth;
+                    canvas.height = videoRef.current.videoHeight;
+                    context.drawImage(videoRef.current, 0, 0);
+                    
+                    // Convert to base64
+                    const imageData = canvas.toDataURL('image/jpeg');
+
+                    // Recognize text using Tesseract
+                    const result = await Tesseract.recognize(imageData);
+                    const recognizedText = result.data.text.trim();
+
+                    // Solve the problem
+                    const solution = solveMathProblem(recognizedText);
+                    setSolution(solution);
+
+                    // Read the solution aloud
+                    speak(`The solution is ${solution.result}`);
+                } catch (err) {
+                    setError('Error analyzing the problem. Please try again.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="max-w-4xl mx-auto p-4">
+                    <div className="bg-white rounded-lg shadow-xl p-6">
+                        <h1 className="text-2xl font-bold mb-6">Virtual Learning Assistant</h1>
+                        
+                        {error && (
+                            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                                {error}
+                            </div>
+                        )}
+
+                        <div className="space-y-6">
+                            {/* Camera Preview */}
+                            <div className="relative aspect-video bg-gray-100 rounded-lg overflow-hidden">
+                                <video
+                                    ref={videoRef}
+                                    autoPlay
+                                    playsInline
+                                    className="w-full h-full object-cover"
+                                />
+                                {!isRecording && (
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <p className="text-gray-500">Camera preview will appear here</p>
+                                    </div>
+                                )}
+                                {loading && (
+                                    <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                                        <div className="text-white">Analyzing...</div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Hidden canvas for image capture */}
+                            <canvas ref={canvasRef} className="hidden" />
+
+                            {/* Controls */}
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={isRecording ? stopCamera : startCamera}
+                                    className={`px-4 py-2 rounded-lg ${
+                                        isRecording 
+                                            ? 'bg-red-500 hover:bg-red-600 text-white' 
+                                            : 'bg-blue-500 hover:bg-blue-600 text-white'
+                                    }`}
+                                >
+                                    {isRecording ? "Stop Camera" : "Start Camera"}
+                                </button>
+                                {isRecording && (
+                                    <button
+                                        onClick={analyzeProblem}
+                                        className="px-4 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white"
+                                        disabled={loading}
+                                    >
+                                        {loading ? "Analyzing..." : "Analyze Problem"}
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Solution Display */}
+                            {solution && (
+                                <div className="mt-6 bg-gray-50 rounded-lg p-4">
+                                    <h2 className="text-xl font-semibold mb-4">Solution</h2>
+                                    <div className="space-y-2">
+                                        {solution.steps.map((step, index) => (
+                                            <div key={index} className="pl-4 border-l-2 border-blue-500">
+                                                <p className="text-gray-700">{step}</p>
+                                            </div>
+                                        ))}
+                                        <div className="mt-4 font-bold">
+                                            Final Answer: {solution.result}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Render the app
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

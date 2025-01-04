@@ -1,6 +1,4 @@
-Here's the content in proper Markdown syntax for your GitHub repository README file: 
 
-```markdown
 # Virtual Learning Assistant
 
 A virtual learning assistant web application that uses AI to solve math problems by analyzing text from a live camera feed. It captures the problem, processes it, and provides a step-by-step solution with text-to-speech capabilities.
